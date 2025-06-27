@@ -1,0 +1,28 @@
+### This code snippet is a prework setup for using Elasticsearch with a text embedding model.
+As a prework you need to install the text_embedding model in your Elasticsearch instance.
+In this example i relied on the `sentence-transformers__all-minilm-l6-v2` model.
+This model is available in the Hugging Face Hub and can be used for text embedding tasks.
+
+# Create an inference endpoint for creating embedding for your pdf content
+PUT _inference/text_embedding/minilm-l6
+{
+  "service": "elasticsearch",
+  "service_settings": {
+    "num_allocations": 1,
+    "num_threads": 1,
+    "model_id": "sentence-transformers__all-minilm-l6-v2" 
+  }
+}
+
+# Create an index mapping
+PUT pdf-documentation-reader
+{
+  "mappings": {
+    "properties": {
+      "body": {
+        "type": "semantic_text",
+        "inference_id": "minilm-l6"
+      }
+    }
+  }
+}

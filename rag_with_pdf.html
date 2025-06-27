@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elasticsearch RAG Search</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles to properly format markdown output */
+        /* These styles provide better defaults for markdown elements not fully covered by Tailwind's base styles */
+        .markdown-output h1 {
+            font-size: 2.25rem; /* 3xl */
+            font-weight: 700; /* bold */
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        .markdown-output h2 {
+            font-size: 1.875rem; /* 2xl */
+            font-weight: 700; /* bold */
+            margin-top: 1.75rem;
+            margin-bottom: 0.875rem;
+        }
+        .markdown-output h3 {
+            font-size: 1.5rem; /* xl */
+            font-weight: 600; /* semibold */
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .markdown-output h4 {
+            font-size: 1.25rem; /* lg */
+            font-weight: 600; /* semibold */
+            margin-top: 1.25rem;
+            margin-bottom: 0.625rem;
+        }
+        .markdown-output h5 {
+            font-size: 1.125rem; /* base */
+            font-weight: 600; /* semibold */
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .markdown-output h6 {
+            font-size: 1rem; /* sm */
+            font-weight: 600; /* semibold */
+            margin-top: 0.75rem;
+            margin-bottom: 0.375rem;
+        }
+        .markdown-output ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .markdown-output ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .markdown-output li {
+            margin-bottom: 0.25rem;
+            line-height: 1.5; /* Ensure good line spacing for list items */
+        }
+        .markdown-output p {
+            margin-bottom: 0.75rem;
+            line-height: 1.625; /* Improve readability for paragraphs */
+        }
+        .markdown-output strong {
+            font-weight: 700;
+        }
+        .markdown-output em {
+            font-style: italic;
+        }
+        .markdown-output hr {
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-top: 1px solid #e5e7eb; /* gray-300 */
+        }
+        .markdown-output pre {
+            background-color: #f3f4f6; /* gray-100 */
+            border-radius: 0.5rem; /* rounded-lg */
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: monospace;
+            margin-bottom: 1rem;
+        }
+        .markdown-output code {
+            font-family: monospace;
+            background-color: #f3f4f6; /* gray-100 */
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+        }
+        .markdown-output pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-inter">
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Ask me a question about your home device</h1>
+            <p class="text-gray-600 mb-6">Your person assistant for small technical issues on home devices.</p>
+
+            <!-- Drag and Drop PDF Upload Area -->
+            <div id="drop-zone" class="mt-6 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition duration-150 ease-in-out">
+                <p class="text-gray-600 mb-2">Drag and drop your PDF file here, or click to select</p>
+                <input type="file" id="pdf-upload-input" accept=".pdf" class="hidden">
+                <button id="select-pdf-button" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Select PDF</button>
+                <p id="file-name" class="text-sm text-gray-500 mt-2 hidden"></p>
+            </div>
+
+            <!-- Loading Indicator for PDF Upload -->
+            <div id="pdf-upload-loading" class="hidden text-center my-4">
+                <div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
+                <p class="mt-2 text-gray-600">Uploading PDF...</p>
+            </div>
+
+            <!-- PDF Upload Success/Error Message -->
+            <div id="pdf-upload-message" class="hidden px-4 py-3 rounded-lg relative mt-4" role="alert">
+                <span id="pdf-upload-message-text" class="block sm:inline"></span>
+            </div>
+
+            <!-- Search Form -->
+            <div class="mb-4 mt-6"> <!-- Added mt-6 for spacing after PDF upload section -->
+                <label for="search-input" class="block text-sm font-medium text-gray-700 mb-1">Your Query</label>
+                <input type="text" id="search-input" class="w-full px-4 py-2 text-gray-700 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., What are the main complaints about the battery life?">
+            </div>
+
+            <button id="search-button" class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400 font-semibold transition duration-150 ease-in-out">
+                Search and Generate
+            </button>
+
+            <!-- Loading Indicator -->
+            <div id="loading-indicator" class="hidden text-center my-8">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                <p class="mt-2 text-gray-600">Searching and Generating...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-6" role="alert">
+                <strong class="font-bold">Error!</strong>
+                <span class="block sm:inline" id="error-text"></span>
+            </div>
+
+            <!-- RAG Response Section -->
+            <div id="rag-response-container" class="hidden mt-8">
+                 <h2 class="text-2xl font-bold text-gray-800 mb-4">Generated Answer</h2>
+                 <!-- IMPORTANT: Added 'markdown-output' class here to apply markdown specific styling -->
+                 <div id="rag-response" class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-gray-800 whitespace-pre-wrap markdown-output"></div>
+            </div>
+
+            <!-- Removed: Results Section (as per your original code) -->
+            <!--
+            <div id="results-container" class="mt-8">
+                Search results will be dynamically inserted here
+            </div>
+            -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search-input');
+            const searchButton = document.getElementById('search-button');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const errorMessage = document.getElementById('error-message');
+            const errorText = document.getElementById('error-text');
+            const ragResponseContainer = document.getElementById('rag-response-container');
+            const ragResponse = document.getElementById('rag-response');
+    
+            // NO MORE HARDCODED ELASTICSEARCH_URL, INDEX_NAME, API_KEY, MODEL_ID, HEADERS HERE!
+            // These are handled securely on the backend.
+    
+            /**
+             * Sets the loading state of the UI for the search functionality.
+             * @param {boolean} isLoading - True to show loading, false to hide.
+             */
+            const setLoading = (isLoading) => {
+                loadingIndicator.classList.toggle('hidden', !isLoading);
+                searchButton.disabled = isLoading;
+    
+                // Clear previous results and errors when a new search starts
+                if (isLoading) {
+                    ragResponseContainer.classList.add('hidden');
+                    errorMessage.classList.add('hidden');
+                    ragResponse.innerHTML = ''; // Clear previous answer
+                }
+            };
+    
+            /**
+             * Formats raw text from the LLM into HTML, converting markdown-like
+             * syntax (headings, lists, bold, italic, code blocks) into their HTML equivalents.
+             * This function is designed to handle common markdown patterns for better readability.
+             * @param {string} text The raw text string from the LLM.
+             * @returns {string} The formatted HTML string.
+             */
+            function formatTextToHtml(text) {
+                // Your existing formatTextToHtml function remains unchanged
+                // ... (keep the function exactly as you have it)
+                // Normalize newlines to Unix style for consistent processing
+                const lines = text.replace(/\r\n/g, '\n').split('\n');
+                let html = '';
+                let inUnorderedList = false;
+                let inOrderedList = false;
+                let inCodeBlock = false; // State to track if inside a fenced code block
+    
+                /**
+                 * Helper function to close any currently open list or code block tags.
+                 */
+                const closeTags = () => {
+                    if (inUnorderedList) {
+                        html += '</ul>';
+                        inUnorderedList = false;
+                    }
+                    if (inOrderedList) {
+                        html += '</ol>';
+                        inOrderedList = false;
+                    }
+                    if (inCodeBlock) {
+                        html += '</code></pre>';
+                        inCodeBlock = false;
+                    }
+                };
+    
+                lines.forEach(line => {
+                    const trimmedLine = line.trim();
+    
+                    // Check for fenced code block start/end (```)
+                    if (trimmedLine.startsWith('```')) {
+                        closeTags(); // Close any lists before a code block
+                        if (inCodeBlock) {
+                            html += '</code></pre>';
+                            inCodeBlock = false;
+                        } else {
+                            // Extract language hint if available (e.g., ```javascript)
+                            const langMatch = trimmedLine.match(/^```(\S*)/);
+                            const languageClass = langMatch && langMatch[1] ? `language-${langMatch[1]}` : '';
+                            html += `<pre><code class="${languageClass}">`;
+                            inCodeBlock = true;
+                        }
+                        return; // Skip further processing for code block delimiters
+                    }
+    
+                    // If currently inside a code block, just append the line with a newline
+                    if (inCodeBlock) {
+                        html += `${line}\n`; // Append raw line to preserve indentation/whitespace
+                        return;
+                    }
+    
+                    // Handle markdown elements outside of code blocks
+    
+                    // Headings (H1 to H6)
+                    const headingMatch = trimmedLine.match(/^(#+)\s*(.*)/);
+                    if (headingMatch) {
+                        closeTags(); // Close any lists before a heading
+                        const level = headingMatch[1].length;
+                        const content = headingMatch[2].trim();
+                        // Assigning Tailwind-like classes for consistent sizing and spacing
+                        const headingClasses = [
+                            'text-4xl font-bold mt-6 mb-4', // h1
+                            'text-3xl font-bold mt-5 mb-3', // h2
+                            'text-2xl font-semibold mt-4 mb-2', // h3
+                            'text-xl font-semibold mt-3 mb-1', // h4
+                            'text-lg font-semibold mt-3 mb-1', // h5
+                            'text-base font-semibold mt-2 mb-1' // h6
+                        ][level - 1] || 'font-bold mt-2 mb-1'; // Fallback for invalid levels
+                        html += `<h${level} class="${headingClasses}">${content}</h${level}>`;
+                        return;
+                    }
+    
+                    // Horizontal Rule (---, ***, or ___)
+                    if (/^[-_*]{3,}$/.test(trimmedLine)) {
+                        closeTags(); // Close any lists before a horizontal rule
+                        html += '<hr class="my-4 border-t border-gray-300">';
+                        return;
+                    }
+    
+                    // Unordered List Items (- item, * item)
+                    const ulMatch = trimmedLine.match(/^[-*]\s+(.*)/);
+                    if (ulMatch) {
+                        if (inOrderedList) { // Close ordered list if transitioning to unordered
+                            html += '</ol>';
+                            inOrderedList = false;
+                        }
+                        if (!inUnorderedList) {
+                            html += '<ul class="list-disc pl-5 mb-2">';
+                            inUnorderedList = true;
+                        }
+                        html += `<li class="mb-1">${ulMatch[1].trim()}</li>`;
+                        return;
+                    }
+    
+                    // Ordered List Items (1. item, 2. item)
+                    const olMatch = trimmedLine.match(/^\d+\.\s+(.*)/);
+                    if (olMatch) {
+                        if (inUnorderedList) { // Close unordered list if transitioning to ordered
+                            html += '</ul>';
+                            inUnorderedList = false;
+                        }
+                        if (!inOrderedList) {
+                            html += '<ol class="list-decimal pl-5 mb-2">';
+                            inOrderedList = true;
+                        }
+                        html += `<li class="mb-1">${olMatch[1].trim()}</li>`;
+                        return;
+                    }
+    
+                    // If we reach here, the line is not a special markdown element.
+                    // Close any open lists and treat it as a paragraph.
+                    closeTags();
+                    if (trimmedLine) {
+                        html += `<p class="mb-2">${trimmedLine}</p>`;
+                    } else {
+                        html += '<p class="mb-2"></p>'; // Preserve empty lines for spacing
+                    }
+                });
+    
+                // Ensure all tags are closed at the very end of the text
+                closeTags();
+    
+                // Apply inline formatting (bold, italic, inline code) after block-level processing
+                // Bold: **text**
+                html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                // Italic: *text* or _text_
+                html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                html = html.replace(/_(.*?)_/g, '<em>$1</em>');
+                // Inline code: `code`
+                html = html.replace(/`(.*?)`/g, '<code>$1</code>');
+    
+                return html;
+            }
+    
+            /**
+             * Displays an error message to the user for search queries.
+             * @param {string} message - The error message to display.
+             */
+            const showError = (message) => {
+                errorText.textContent = message;
+                errorMessage.classList.remove('hidden');
+            };
+    
+            /**
+             * Renders the generated RAG response into the UI.
+             * @param {string} text - The raw text response from the LLM.
+             */
+            const renderRagResponse = (text) => {
+                ragResponse.innerHTML = formatTextToHtml(text);
+                ragResponseContainer.classList.remove('hidden');
+            }
+    
+            /**
+             * Performs the semantic search and RAG inference process by calling the backend.
+             */
+            const performSearchAndRag = async () => {
+                const queryText = searchInput.value.trim();
+    
+                if (!queryText) {
+                    showError("Please enter a search query.");
+                    return;
+                }
+    
+                setLoading(true); // Show loading indicator
+    
+                try {
+                    // Call your backend endpoint instead of direct Elasticsearch
+                    const backendResponse = await fetch('/search_and_rag', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ query: queryText })
+                    });
+    
+                    const data = await backendResponse.json();
+    
+                    if (!backendResponse.ok) {
+                        throw new Error(data.error || `Backend request failed with status: ${backendResponse.status}`);
+                    }
+    
+                    renderRagResponse(data.response); // The backend sends back 'response'
+                    console.log('Generated Answer from Backend:', data.response);
+    
+                } catch (error) {
+                    console.error('An error occurred:', error);
+                    showError(`An error occurred. Check the console for details. Error: ${error.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+    
+            // Event Listeners for search button and Enter key
+            searchButton.addEventListener('click', performSearchAndRag);
+            searchInput.addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') {
+                    searchButton.click();
+                }
+            });
+    
+            // --- PDF Upload Specific Elements and Logic ---
+            const dropZone = document.getElementById('drop-zone');
+            const pdfUploadInput = document.getElementById('pdf-upload-input');
+            const selectPdfButton = document.getElementById('select-pdf-button');
+            const fileNameDisplay = document.getElementById('file-name');
+            const pdfUploadLoading = document.getElementById('pdf-upload-loading');
+            const pdfUploadMessage = document.getElementById('pdf-upload-message');
+            const pdfUploadMessageText = document.getElementById('pdf-upload-message-text');
+    
+            /**
+             * Function to display PDF upload messages (success/error).
+             * @param {string} message - The message to display.
+             * @param {'success' | 'error'} type - The type of message (determines styling).
+             */
+            const showPdfUploadMessage = (message, type = 'success') => {
+                pdfUploadMessageText.textContent = message;
+                pdfUploadMessage.classList.remove('hidden');
+                if (type === 'success') {
+                    pdfUploadMessage.className = 'px-4 py-3 rounded-lg relative mt-4 bg-green-100 border border-green-400 text-green-700';
+                } else {
+                    pdfUploadMessage.className = 'px-4 py-3 rounded-lg relative mt-4 bg-red-100 border border-red-400 text-red-700';
+                }
+            };
+    
+            /**
+             * Handles the PDF file processing and upload to the backend.
+             * @param {File} file - The PDF file to upload.
+             */
+            const handlePdfUpload = async (file) => {
+                if (!file || file.type !== 'application/pdf') {
+                    showPdfUploadMessage('Please drop or select a valid PDF file.', 'error');
+                    return;
+                }
+    
+                pdfUploadLoading.classList.remove('hidden');
+                pdfUploadMessage.classList.add('hidden');
+                fileNameDisplay.textContent = `Selected file: ${file.name}`;
+                fileNameDisplay.classList.remove('hidden');
+    
+                const formData = new FormData();
+                formData.append('pdf_file', file);
+    
+                try {
+                    // Send the PDF file to your Python backend endpoint
+                    const uploadResponse = await fetch('/upload-pdf', { // Call the backend /upload-pdf endpoint
+                        method: 'POST',
+                        body: formData,
+                    });
+    
+                    const result = await uploadResponse.json();
+    
+                    if (uploadResponse.ok) {
+                        showPdfUploadMessage(result.message || 'PDF uploaded and background processing initiated!');
+                        console.log('PDF Upload Success:', result);
+                    } else {
+                        throw new Error(result.error || `Upload failed with status: ${uploadResponse.status}`);
+                    }
+                } catch (error) {
+                    console.error('PDF upload error:', error);
+                    showPdfUploadMessage(`Error uploading PDF: ${error.message}`, 'error');
+                } finally {
+                    pdfUploadLoading.classList.add('hidden');
+                }
+            };
+    
+            // Event Listeners for Drag and Drop PDF Upload Area
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-blue-500', 'bg-blue-50');
+            });
+    
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+            });
+    
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handlePdfUpload(files[0]);
+                }
+            });
+    
+            selectPdfButton.addEventListener('click', () => {
+                pdfUploadInput.click();
+            });
+    
+            pdfUploadInput.addEventListener('change', (e) => {
+                const files = e.target.files;
+                if (files.length > 0) {
+                    handlePdfUpload(files[0]);
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
