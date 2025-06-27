@@ -1,4 +1,4 @@
-# Elasticsearch Text Embedding Prework Setup
+# Tech Assistant for home appliances
 
 This repository provides a prework setup for integrating Elasticsearch with the `sentence-transformers__all-minilm-l6-v2` text embedding model. This guide will show you how to prepare your Elasticsearch instance for text embedding tasks, which you can then use for semantic search and other AI-powered functionalities.
 
